@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+        #chat-container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: calc(100% - 120px); /* Adjust height to cover available space */
+            overflow-y: auto;
+            background-color: white;
+            box-sizing: border-box;
+        }
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+            box-sizing: border-box;
+        }
+        #send-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            background-color: #007BFF;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 80%;
+            word-wrap: break-word;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .user-message {
+            text-align: right;
+            background-color: #e6f7ff;
+            color: #00529b;
+            margin-left: auto;
+        }
+        .bot-message {
+            text-align: left;
+            background-color: #e6ffe6;
+            color: #006600;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your message..." />
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById("chat-container");
+        const userInput = document.getElementById("user-input");
+        const sendButton = document.getElementById("send-button");
+    
+        const websocket = new WebSocket("ws://0.0.0.0:3000/chat/ws");
+    
+        let currentMessageDiv;
+    
+        websocket.onmessage = function(event) {
+            const messageChunk = event.data;
+            currentMessageDiv.textContent += messageChunk;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        };
+    
+        websocket.onclose = function() {
+            currentMessageDiv = null;  // Reset current message when WebSocket is closed
+        };
+    
+        sendButton.onclick = function() {
+            const message = userInput.value.trim();
+            if (message) {
+                const userMessageDiv = document.createElement("div");
+                userMessageDiv.classList.add("message", "user-message");
+                userMessageDiv.textContent = message;
+    
+                chatContainer.appendChild(userMessageDiv);
+                userInput.value = ""; 
+                websocket.send(message);
+
+                currentMessageDiv = document.createElement("div");
+                currentMessageDiv.classList.add("message", "bot-message");
+                chatContainer.appendChild(currentMessageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight; 
+                
+                chatContainer.scrollTop = chatContainer.scrollHeight;  // Scroll to bottom
+            }
+        };
+    
+        userInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                sendButton.click();  // Simulate button click on Enter
+            }
+        });
+    </script>
+</body>
+</html>
