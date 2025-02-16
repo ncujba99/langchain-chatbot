@@ -6,8 +6,8 @@ from services.langchain import stream_response
 router = APIRouter(
     prefix="/chat",
 )
-# templates = Jinja2Templates(directory="chatbot/templates")
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="chatbot/templates")
+# templates = Jinja2Templates(directory="templates")
 
 
 @router.websocket("/ws")
@@ -15,7 +15,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     try:
-
         while True:
             input = await websocket.receive_text()
             await stream_response(user_input=input, ws=websocket)

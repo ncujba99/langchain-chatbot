@@ -1,60 +1,66 @@
-import datetime
-
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableConfig, chain
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
+# from langchain_core.runnables import RunnableConfig, chain
+# from langchain_core.messages import HumanMessage, AIMessage
+
+# from langchain_core.runnables import RunnableConfig, chain
+
 from fastapi import WebSocket
 
 
-today = datetime.datetime.today().strftime("%D")
-prompt = ChatPromptTemplate(
+from langchain_ollama import ChatOllama
+
+from langchain_core.tools import tool
+from langchain_core.pydantic_v1 import BaseModel, Field
+
+
+
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+
+model = ChatOllama(
+    model="deepseek-r1:8b",
+    base_url="http://ollama:11434",
+    streaming=True,
+    temperature=0.1
+)
+
+prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", f"You are a helpful assistant. The date today is {today}."),
+        ("system", "You are a helpful assistant"),
         ("human", "{user_input}"),
-        ("placeholder", "{messages}"),
+        ("placeholder", "{messages}")
     ]
 )
 
-model = ChatOpenAI(model="gpt-4o-mini", streaming=True)
-search_tool = TavilySearchResults(
-    max_results=5,
-    search_depth="advanced",
-    include_answer=True,
-    include_raw_content=True,
-    include_images=False,
+class SearchInput(BaseModel):
+    query: str = Field(description="should be a search query")
+
+
+@tool("search-tool", args_schema=SearchInput, return_direct=True)
+def search(query: str) -> str:
+    """Look up things online."""
+    return "unable to recive a response"
+
+
+app = create_react_agent(
+    model=model, 
+    tools=[search],
+    checkpointer=MemorySaver(),
+    prompt=prompt
 )
 
 
-llm_with_tools = model.bind_tools([search_tool])
-llm_chain = prompt | llm_with_tools
 
-history = []
+def tool_chain(user_input: str):
 
-
-@chain
-def tool_chain(user_input: str, config: RunnableConfig):
-    history.append(HumanMessage(content=user_input))
-
-    ai_msg = llm_chain.invoke({"user_input": user_input}, config=config)
-    if ai_msg.tool_calls:
-        yield "searching in www \n \n "
-        tool_msgs = search_tool.batch(ai_msg.tool_calls, config=config)
-        history.extend([ai_msg, *tool_msgs])
-
-    bufer = ""
-
-    for token in llm_chain.stream(
-        {"user_input": user_input, "messages": history}, config=config
+    for token in app.stream(
+        {"user_input": user_input},
+            config={"configurable": {"thread_id": 42}}
     ):
-        yield token.content
-        bufer = bufer + token.content
-    history.append(AIMessage(content=bufer))
+        yield token
 
 
-async def stream_response(user_input: str, ws: WebSocket):
-    tokens = tool_chain.stream(user_input)
-
-    for token in tokens:
+async def stream_response(user_input: str, ws: WebSocket):    
+    for token in tool_chain(user_input):
         await ws.send_text(token)
