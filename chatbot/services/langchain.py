@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.tools import tool
@@ -6,15 +5,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
 from fastapi import WebSocket
 
+from services.elasticsearch import search_tool
 
-@tool
-async def search_tool(query: str):
-    """Elastic search query"""
-    print(query)
-    await asyncio.sleep(100)
-    return {"status": ""}
 
-# Store session-based chat history
 session_history = {}
 
 today = datetime.datetime.today().strftime("%D")
@@ -38,7 +31,7 @@ async def tool_chain(user_input: str, session_id: str):
     history = session_history[session_id]
     history.append(HumanMessage(content=user_input))
 
-    ai_msg = await llm_chain.ainvoke({"user_input": user_input})
+    ai_msg = await llm_chain.ainvoke({"user_input": user_input, "messages": history})
 
     if ai_msg.tool_calls:
         yield "searching in www \n \n "
