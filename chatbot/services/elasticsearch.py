@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import List, Literal, Optional
 from langchain.tools import tool
 from elasticsearch import AsyncElasticsearch
 
@@ -11,9 +11,9 @@ es = AsyncElasticsearch([{'host': es_host, 'port': es_port, 'scheme': 'http'}])
 index_name = "products"
 
 @tool
-async def search_tool(
-    query: str = "",
-    product_id: str = None,
+async def product_search_tool(
+    search_term: Optional[str] = None,
+    product_id: Optional[str] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
     color: Optional[str] = None,
@@ -24,30 +24,38 @@ async def search_tool(
     min_rating: Optional[float] = None,
     max_rating: Optional[float] = None,
     features: Optional[List[str]] = None,
-    sort_by: Optional[str] = None,
-    sort_order: str = "asc",
-    limit: int = 50
+    sort_by: Optional[Literal["price", "rating", "name", "relevance"]] = None,
+    sort_order: Literal["asc", "desc"] = "asc",
+
 ):
-    """Elastic search query for products.
+    """
+    ElasticSearch product search tool.
+
+    This tool performs an ElasticSearch query and returns the response as a Python dictionary.
 
     Args:
-        query (str, optional): General search term for product name or description. Defaults to "".
-        product_id (str, optional): Filter by product ID. Defaults to None.
-        category (str, optional): Filter by product category. Defaults to None.
-        brand (str, optional): Filter by product brand. Defaults to None.
-        color (str, optional): Filter by product color. Defaults to None.
-        material (str, optional): Filter by product material. Defaults to None.
-        min_price (float, optional): Minimum price to filter by. Defaults to None.
-        max_price (float, optional): Maximum price to filter by. Defaults to None.
-        rating (float, optional): Exact rating to filter by. Defaults to None.
-        min_rating (float, optional): Minimum rating to filter by. Defaults to None.
-        max_rating (float, optional): Maximum rating to filter by. Defaults to None.
-        features (List[str], optional): List of features the product should have. Defaults to None.
-        sort_by (str, optional): Field to sort results by (e.g., price, rating, name). Defaults to None.
-        sort_order (str, optional): Sort order ("asc" or "desc"). Defaults to "asc".
-        limit (int, optional): Maximum number of results to return. Defaults to 5.
+        search_term (Optional[str]): General search term for product name or description. If not provided, all products are considered.
+        product_id (Optional[str]): Filter by product ID.
+        category (Optional[str]): Filter by product category.
+        brand (Optional[str]): Filter by product brand.
+        color (Optional[str]): Filter by product color.
+        material (Optional[str]): Filter by product material.
+        min_price (Optional[float]): Minimum price filter.
+        max_price (Optional[float]): Maximum price filter.
+        rating (Optional[float]): Exact rating filter. If provided, min_rating and max_rating are ignored.
+        min_rating (Optional[float]): Minimum rating filter.
+        max_rating (Optional[float]): Maximum rating filter.
+        features (Optional[List[str]]): List of required product features.
+        sort_by (Optional[Literal["price", "rating", "name", "relevance"]]): Field to sort results by.
+        sort_order (Literal["asc", "desc"]): Sorting order, default is "asc".
+
+    Returns:
+        list: The ElasticSearch response as a Python dictionary.
     """
-    print(f"Searching for products with query: {query}, product_id: {product_id}, category: {category}, brand: {brand}, color: {color}, material: {material}, min_price: {min_price}, max_price: {max_price}, rating: {rating}, min_rating: {min_rating}, max_rating: {max_rating}, features: {features}, sort_by: {sort_by}, sort_order: {sort_order}, limit: {limit}")
+
+    limit= 5
+
+    print(f"Searching for products with  product_id: {product_id}, category: {category}, brand: {brand}, color: {color}, material: {material}, min_price: {min_price}, max_price: {max_price}, rating: {rating}, min_rating: {min_rating}, max_rating: {max_rating}, features: {features}, sort_by: {sort_by}, sort_order: {sort_order}, limit: {limit}")
 
     search_body = {
         "size": limit,
@@ -59,15 +67,6 @@ async def search_tool(
         }
     }
 
-    if query:
-        search_body["query"]["bool"]["must"].append({"match": {"name": query}})
-        search_body["query"]["bool"]["must"].append({"match": {"description": query}})
-        search_body["query"]["bool"]["must"] = [] # Clear the "must" list
-        search_body["query"]["bool"]["should"] = [
-            {"match": {"name": query}},
-            {"match": {"description": query}}
-        ]
-        search_body["query"]["bool"]["minimum_should_match"] = 1
 
     if product_id:
         search_body["query"]["bool"]["filter"].append({"term": {"product_id.keyword": product_id}})
@@ -111,11 +110,9 @@ async def search_tool(
             sort_field = f"{sort_by}.keyword"
         search_body["sort"] = [{sort_field: {"order": sort_order}}]
 
-    try:
-        response = await es.search(index=index_name, body=search_body)
-        results = []
-        for hit in response['hits']['hits']:
-            results.append(hit['_source'])
-        return {"results": results}
-    except Exception as e:
-        return {"error": f"An error occurred during the search: {e}"}
+
+    response = await es.search(index=index_name, body=search_body)
+    results = []
+    for hit in response['hits']['hits']:
+        results.append(hit['_source'])
+    return results
