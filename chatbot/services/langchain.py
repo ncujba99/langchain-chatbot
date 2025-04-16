@@ -1,60 +1,47 @@
-import datetime
-
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableConfig, chain
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
 from fastapi import WebSocket
 
+from services.elasticsearch import product_search_tool
 
-today = datetime.datetime.today().strftime("%D")
+
+session_history = {}
+
 prompt = ChatPromptTemplate(
     [
-        ("system", f"You are a helpful assistant. The date today is {today}."),
+        ("system", "You are a helpful assistant. Use product search results to provide natural responses. Here are the prior messages: {messages}."),
         ("human", "{user_input}"),
-        ("placeholder", "{messages}"),
     ]
 )
 
 model = ChatOpenAI(model="gpt-4o-mini", streaming=True)
-search_tool = TavilySearchResults(
-    max_results=5,
-    search_depth="advanced",
-    include_answer=True,
-    include_raw_content=True,
-    include_images=False,
-)
-
-
-llm_with_tools = model.bind_tools([search_tool])
+llm_with_tools = model.bind_tools([product_search_tool])
 llm_chain = prompt | llm_with_tools
 
-history = []
 
+async def stream_response(user_input: str, ws: WebSocket, session_id: str ):
 
-@chain
-def tool_chain(user_input: str, config: RunnableConfig):
+    if session_id not in session_history:
+        session_history[session_id] = []
+    
+    history = session_history[session_id]
     history.append(HumanMessage(content=user_input))
 
-    ai_msg = llm_chain.invoke({"user_input": user_input}, config=config)
+    ai_msg = await llm_chain.ainvoke({"user_input": user_input, "messages": history})
+
     if ai_msg.tool_calls:
-        yield "searching in www \n \n "
-        tool_msgs = search_tool.batch(ai_msg.tool_calls, config=config)
+        await ws.send_text("calling tools")
+        tool_msgs = await product_search_tool.abatch(ai_msg.tool_calls)
         history.extend([ai_msg, *tool_msgs])
 
-    bufer = ""
-
-    for token in llm_chain.stream(
-        {"user_input": user_input, "messages": history}, config=config
+    buffer = ""
+    
+    async for token in llm_chain.astream(
+        {"user_input": user_input, "messages": history}
     ):
-        yield token.content
-        bufer = bufer + token.content
-    history.append(AIMessage(content=bufer))
+        await ws.send_text(token.content)
+        buffer += token.content
 
+    history.append(AIMessage(content=buffer))
 
-async def stream_response(user_input: str, ws: WebSocket):
-    tokens = tool_chain.stream(user_input)
-
-    for token in tokens:
-        await ws.send_text(token)

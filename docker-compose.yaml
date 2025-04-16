@@ -1,7 +1,22 @@
 services:
   chatbot:
-    build: . 
-    env_file: .env 
+    build: .
+    env_file: .env
     ports:
-    - "3000:3000"  
-    
+      - "3000:3000"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3 # Use the version you prefer
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node # Recommended for development/testing
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # Adjust memory limits as needed
+      - xpack.security.enabled=false # Disable security for development (enable in production)
+    ports:
+      - "9200:9200" # HTTP access
+      - "9300:9300" # Transport layer (for inter-node communication if you scale)
+#     volumes:
+#       - esdata:/usr/share/elasticsearch/data # Persist data across restarts
+
+# volumes:
+#   esdata:
